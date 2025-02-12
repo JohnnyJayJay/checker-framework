@@ -204,7 +204,7 @@ jar {
     dependsOn(checkerJar)
     // Never build the skinny jar.
     onlyIf {false}
-    archiveClassifier = 'skinny'
+//    archiveClassifier = 'skinny'
 }
 
 shadowJar {

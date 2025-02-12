@@ -3,7 +3,7 @@ plugins {
 }
 
 ext {
-    annotatedJdkHome = '../../jdk'
+    annotatedJdkHome = '../../../jdk'
 }
 
 sourceSets {
@@ -86,9 +86,11 @@ dependencies {
 task cloneAnnotatedJdk() {
     description 'Obtain or update the annotated JDK.'
     doLast {
+        println "jdk path"
+        def jdkHomeAbsolute = file(annotatedJdkHome).absolutePath
         if (file(annotatedJdkHome).exists()) {
             exec {
-                workingDir annotatedJdkHome
+                workingDir jdkHomeAbsolute
                 executable 'git'
                 args = ['pull', '-q']
                 ignoreExitValue = true
@@ -96,7 +98,7 @@ task cloneAnnotatedJdk() {
         } else {
             println 'Cloning annotated JDK repository.'
             exec {
-                workingDir "${annotatedJdkHome}/../"
+                workingDir "${jdkHomeAbsolute}/../"
                 executable 'git'
                 args = [
                     'clone',
