@@ -107,6 +107,15 @@ import javax.lang.model.type.TypeMirror;
  * <p>Steps 2 and 3 are separated so that an error is issued only once per invalid expression string
  * rather than every time the expression string is parsed. (The expression string is parsed multiple
  * times because annotated types are created multiple times.)
+ *
+ * @implNote <strong>CAUTION! This version's behaviour differs from the standard checker framework implementation!</strong>
+ *           <p>
+ *           The standard implementation considers annotation fields for dependent analysis/viewpoint
+ *           adaptation only if they are annotated with @JavaExpression and are of type {@code String[]}.
+ *           This custom adjustment changes this behaviour: all fields of type {@code String} are
+ *           considered to be Java expressions and are therefore subject to viewpoint adaptation.
+ *           The implication of this is that this version is incompatible with existing checkers
+ *           and is designed to fit the design of the property checker specifically.
  */
 public class DependentTypesHelper {
 
@@ -172,7 +181,7 @@ public class DependentTypesHelper {
 
     /**
      * Returns a list of the elements in the annotation class that should be interpreted as Java
-     * expressions, namely those annotated with {@code @}{@link JavaExpression}.
+     * expressions.
      *
      * @param clazz annotation class
      * @param env processing environment for getting the ExecutableElement
@@ -182,14 +191,10 @@ public class DependentTypesHelper {
     private static List<ExecutableElement> getExpressionElements(
             Class<? extends Annotation> clazz, ProcessingEnvironment env) {
         Method[] methods = clazz.getMethods();
-        if (methods == null) {
-            return Collections.emptyList();
-        }
         List<ExecutableElement> elements = new ArrayList<>();
         for (Method method : methods) {
-            org.checkerframework.framework.qual.JavaExpression javaExpressionAnno =
-                    method.getAnnotation(org.checkerframework.framework.qual.JavaExpression.class);
-            if (javaExpressionAnno != null) {
+            if (method.getDeclaringClass().equals(clazz)
+                    && method.getReturnType() == String.class) {
                 elements.add(
                         TreeUtils.getMethod(
                                 clazz, method.getName(), method.getParameterCount(), env));
@@ -844,29 +849,23 @@ public class DependentTypesHelper {
             return null;
         }
 
-        Map<ExecutableElement, List<JavaExpression>> newElements = new HashMap<>();
+        Map<ExecutableElement, JavaExpression> newElements = new HashMap<>();
         for (ExecutableElement element : getListOfExpressionElements(anno)) {
-            List<String> expressionStrings =
-                    AnnotationUtils.getElementValueArray(
-                            anno, element, String.class, Collections.emptyList());
-            List<JavaExpression> javaExprs = new ArrayList<>(expressionStrings.size());
-            newElements.put(element, javaExprs);
-            for (String expression : expressionStrings) {
-                JavaExpression result;
-                if (shouldPassThroughExpression(expression)) {
-                    result = new PassThroughExpression(objectTM, expression);
-                } else {
-                    try {
-                        result = stringToJavaExpr.toJavaExpression(expression);
-                    } catch (JavaExpressionParseException e) {
-                        result = createError(expression, e);
-                    }
+            String expression = AnnotationUtils.getElementValue(anno, element, String.class);
+            JavaExpression result;
+            if (shouldPassThroughExpression(expression)) {
+                result = new PassThroughExpression(objectTM, expression);
+            } else {
+                try {
+                    result = stringToJavaExpr.toJavaExpression(expression);
+                } catch (JavaExpressionParseException e) {
+                    result = createError(expression, e);
                 }
+            }
 
-                if (result != null) {
-                    result = transform(result);
-                    javaExprs.add(result);
-                }
+            if (result != null) {
+                result = transform(result);
+                newElements.put(element, result);
             }
         }
         return buildAnnotation(anno, newElements);
@@ -918,16 +917,14 @@ public class DependentTypesHelper {
      */
     protected AnnotationMirror buildAnnotation(
             AnnotationMirror originalAnno,
-            Map<ExecutableElement, List<JavaExpression>> elementMap) {
+            Map<ExecutableElement, JavaExpression> elementMap) {
         AnnotationBuilder builder =
                 new AnnotationBuilder(
                         atypeFactory.getProcessingEnv(),
                         AnnotationUtils.annotationName(originalAnno));
         builder.copyElementValuesFromAnnotation(originalAnno, elementMap.keySet());
-        for (Map.Entry<ExecutableElement, List<JavaExpression>> entry : elementMap.entrySet()) {
-            List<String> strings =
-                    CollectionsPlume.mapList(JavaExpression::toString, entry.getValue());
-            builder.setValue(entry.getKey(), strings);
+        for (Map.Entry<ExecutableElement, JavaExpression> entry : elementMap.entrySet()) {
+            builder.setValue(entry.getKey().getSimpleName(), entry.getValue().toString());
         }
         return builder.build();
     }
@@ -1109,15 +1106,9 @@ public class DependentTypesHelper {
         List<DependentTypesError> errors = new ArrayList<>();
 
         for (ExecutableElement element : getListOfExpressionElements(am)) {
-            // It's always an array, not a single value, because @JavaExpression may only be written
-            // on an annotation element of type String[].
-            List<String> value =
-                    AnnotationUtils.getElementValueArray(
-                            am, element, String.class, Collections.emptyList());
-            for (String v : value) {
-                if (DependentTypesError.isExpressionError(v)) {
-                    errors.add(DependentTypesError.unparse(v));
-                }
+            String value = AnnotationUtils.getElementValue(am, element, String.class);
+            if (DependentTypesError.isExpressionError(value)) {
+                errors.add(DependentTypesError.unparse(value));
             }
         }
         return errors;

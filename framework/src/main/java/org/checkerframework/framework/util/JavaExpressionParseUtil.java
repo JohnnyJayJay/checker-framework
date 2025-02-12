@@ -445,6 +445,15 @@ public class JavaExpressionParseUtil {
                 if (varElem != null) {
                     return new LocalVariable(varElem);
                 }
+            } else if (parameters != null) {
+                // allow parameter references by name
+                for (FormalParameter formalParameter : parameters) {
+                    Element varElt = formalParameter.getElement();
+                    if (varElt.getSimpleName().contentEquals(s)) {
+                        return formalParameter;
+                    }
+                }
+
             }
 
             // Field access
@@ -470,22 +479,6 @@ public class JavaExpressionParseUtil {
             ClassName classType = getIdentifierAsUnqualifiedClassName(s);
             if (classType != null) {
                 return classType;
-            }
-
-            // Err if a formal parameter name is used, instead of the "#2" syntax.
-            if (parameters != null) {
-                for (int i = 0; i < parameters.size(); i++) {
-                    Element varElt = parameters.get(i).getElement();
-                    if (varElt.getSimpleName().contentEquals(s)) {
-                        throw new ParseRuntimeException(
-                                constructJavaExpressionParseError(
-                                        s,
-                                        String.format(
-                                                DependentTypesError.FORMAL_PARAM_NAME_STRING,
-                                                i + 1,
-                                                s)));
-                    }
-                }
             }
 
             throw new ParseRuntimeException(

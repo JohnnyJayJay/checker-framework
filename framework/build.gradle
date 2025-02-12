@@ -86,7 +86,6 @@ dependencies {
 task cloneAnnotatedJdk() {
     description 'Obtain or update the annotated JDK.'
     doLast {
-        println "jdk path"
         def jdkHomeAbsolute = file(annotatedJdkHome).absolutePath
         if (file(annotatedJdkHome).exists()) {
             exec {
